@@ -1,57 +1,54 @@
 #include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <iomanip> // For pretty table formatting
 #include "CacheSim.h"
 
-int main() {
-    // ---------------------------------------------------------
-    // 1. CONFIGURATION: 2-Way Set Associative
-    //    Size: 1024B, Block: 64B, Assoc: 2
-    //    Sets = 1024 / (64 * 2) = 8 Sets
-    // ---------------------------------------------------------
-    uint32_t cache_size = 1024;
-    uint32_t block_size = 64;
-    uint32_t associativity = 2; 
+// Helper function to run a full simulation and return the Hit Rate
+double runExperiment(uint32_t size, uint32_t block, uint32_t assoc, std::string tracePath) {
+    CacheSim sim(size, block, assoc);
+    std::ifstream file(tracePath);
+    std::string line;
 
-    std::cout << "Initializing " << associativity << "-Way Cache..." << std::endl;
-    CacheSim myCache(cache_size, block_size, associativity);
+    if (!file.is_open()) return -1.0;
 
-    // ---------------------------------------------------------
-    // 2. THE STRESS TEST (Conflict Scenario)
-    //    Addresses 0x000 and 0x400 both map to Set 0.
-    // ---------------------------------------------------------
+    while (std::getline(file, line)) {
+        try {
+            uint32_t addr = std::stoul(line, nullptr, 16);
+            sim.access(addr);
+        } catch (...) { continue; }
+    }
     
-    // Access A
-    std::cout << "\n--- Accessing 0x000 (Set 0, Way 0) ---" << std::endl;
-    myCache.access(0x000); // MISS
+    // Calculate final hit rate
+    // We'll add a getter or just use the math here if stats are public
+    // For this example, let's assume we want to see the printout
+    sim.printStats();
+    return 0.0; 
+}
 
-    // Access B (In Direct Mapped, this would kick out 0x000)
-    std::cout << "--- Accessing 0x400 (Set 0, Way 1) ---" << std::endl;
-    myCache.access(0x400); // MISS
+int main() {
+    std::string traceFile = "test.trace";
 
-    // Re-access A
-    std::cout << "--- Re-accessing 0x000 ---" << std::endl;
-    bool resultA = myCache.access(0x000);
-    std::cout << "0x000 Result: " << (resultA ? "HIT" : "MISS") << std::endl;
+    std::cout << "Starting Architectural Sensitivity Analysis..." << std::endl;
+    std::cout << "=====================================================" << std::endl;
 
-    // Re-access B
-    std::cout << "--- Re-accessing 0x400 ---" << std::endl;
-    bool resultB = myCache.access(0x400);
-    std::cout << "0x400 Result: " << (resultB ? "HIT" : "MISS") << std::endl;
+    // Experiment 1: Small Direct Mapped (Baseline)
+    std::cout << "\nTEST 1: 1024B, 1-Way (Direct Mapped)" << std::endl;
+    runExperiment(1024, 64, 1, traceFile);
 
-    // ---------------------------------------------------------
-    // 3. THE EVICTION TEST (Filling the Set)
-    //    Accessing a 3rd address (0x800) which also maps to Set 0.
-    //    Since Assoc=2, someone must be kicked out (LRU).
-    // ---------------------------------------------------------
-    std::cout << "\n--- Accessing 0x800 (Set 0 is full, triggering LRU) ---" << std::endl;
-    myCache.access(0x800); // MISS - This kicks out 0x000 (the oldest)
+    // Experiment 2: Same size, but increase Associativity (2-Way)
+    // Goal: See if adding 'Ways' helps with conflicts
+    std::cout << "\nTEST 2: 1024B, 2-Way" << std::endl;
+    runExperiment(1024, 64, 2, traceFile);
 
-    std::cout << "--- Checking if 0x000 was evicted ---" << std::endl;
-    bool resultEvicted = myCache.access(0x000);
-    std::cout << "0x000 Result: " << (resultEvicted ? "HIT" : "MISS (Evicted!)") << std::endl;
+    // Experiment 3: Double the total Capacity
+    // Goal: See if 'Size' is more important than 'Ways'
+    std::cout << "\nTEST 3: 2048B, 1-Way" << std::endl;
+    runExperiment(2048, 64, 1, traceFile);
 
-    // 4. FINAL REPORT
-    std::cout << std::endl;
-    myCache.printStats();
+    std::cout << "\n=====================================================" << std::endl;
+    std::cout << "Analysis Complete." << std::endl;
 
     return 0;
 }
