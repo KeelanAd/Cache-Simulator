@@ -1,57 +1,55 @@
 #include <iostream>
-#include "DirectMappedCache.h"
+#include "CacheSim.h"
 
 int main() {
     // ---------------------------------------------------------
-    // 1. CONFIGURATION
-    // ---------------------------------------------------------
-    // Let's build a small cache to make the math easy to follow.
-    // Cache Size: 1024 bytes (1 KB)
-    // Block Size: 64 bytes
-    //
-    // Rows = 1024 / 64 = 16 Lines
+    // 1. CONFIGURATION: 2-Way Set Associative
+    //    Size: 1024B, Block: 64B, Assoc: 2
+    //    Sets = 1024 / (64 * 2) = 8 Sets
     // ---------------------------------------------------------
     uint32_t cache_size = 1024;
     uint32_t block_size = 64;
+    uint32_t associativity = 2; 
 
-    std::cout << "Initializing Cache..." << std::endl;
-    DirectMappedCache myCache(cache_size, block_size);
+    std::cout << "Initializing " << associativity << "-Way Cache..." << std::endl;
+    CacheSim myCache(cache_size, block_size, associativity);
 
     // ---------------------------------------------------------
-    // 2. THE SIMULATION
-    //    Access a few memory addresses.
+    // 2. THE STRESS TEST (Conflict Scenario)
+    //    Addresses 0x000 and 0x400 both map to Set 0.
     // ---------------------------------------------------------
     
-    // Address A: 0x100 (Decimal 256)
-    // In our 1KB cache, this maps to Index 4.
-    std::cout << "\n--- Accessing Address 0x100 (First Time) ---" << std::endl;
-    bool result = myCache.access(0x100);
-    std::cout << "Result: " << (result ? "HIT" : "MISS") << std::endl; 
-    // EXPECTATION: MISS (Cold start, cache is empty)
+    // Access A
+    std::cout << "\n--- Accessing 0x000 (Set 0, Way 0) ---" << std::endl;
+    myCache.access(0x000); // MISS
 
-    std::cout << "\n--- Accessing Address 0x100 (Second Time) ---" << std::endl;
-    result = myCache.access(0x100);
-    std::cout << "Result: " << (result ? "HIT" : "MISS") << std::endl;
-    // EXPECTATION: HIT (We just loaded it!)
+    // Access B (In Direct Mapped, this would kick out 0x000)
+    std::cout << "--- Accessing 0x400 (Set 0, Way 1) ---" << std::endl;
+    myCache.access(0x400); // MISS
 
-    std::cout << "\n--- Accessing Address 0x200 (Collision!) ---" << std::endl;
-    // Address 0x200 (Decimal 512). 
-    // 512 is exactly 256 bytes away from 256? No.
-    // 512 / 64 = Block 8. 256 / 64 = Block 4.
-    // Wait, let's check the Index logic:
-    // This will likely map to a different index or the same index depending on the bits.
-    // Let's see what happens!
-    result = myCache.access(0x200);
-    std::cout << "Result: " << (result ? "HIT" : "MISS") << std::endl;
+    // Re-access A
+    std::cout << "--- Re-accessing 0x000 ---" << std::endl;
+    bool resultA = myCache.access(0x000);
+    std::cout << "0x000 Result: " << (resultA ? "HIT" : "MISS") << std::endl;
 
-    std::cout << "\n--- Accessing Address 0x100 (Again) ---" << std::endl;
-    result = myCache.access(0x100);
-    std::cout << "Result: " << (result ? "HIT" : "MISS") << std::endl;
-
+    // Re-access B
+    std::cout << "--- Re-accessing 0x400 ---" << std::endl;
+    bool resultB = myCache.access(0x400);
+    std::cout << "0x400 Result: " << (resultB ? "HIT" : "MISS") << std::endl;
 
     // ---------------------------------------------------------
-    // 3. FINAL REPORT
+    // 3. THE EVICTION TEST (Filling the Set)
+    //    Accessing a 3rd address (0x800) which also maps to Set 0.
+    //    Since Assoc=2, someone must be kicked out (LRU).
     // ---------------------------------------------------------
+    std::cout << "\n--- Accessing 0x800 (Set 0 is full, triggering LRU) ---" << std::endl;
+    myCache.access(0x800); // MISS - This kicks out 0x000 (the oldest)
+
+    std::cout << "--- Checking if 0x000 was evicted ---" << std::endl;
+    bool resultEvicted = myCache.access(0x000);
+    std::cout << "0x000 Result: " << (resultEvicted ? "HIT" : "MISS (Evicted!)") << std::endl;
+
+    // 4. FINAL REPORT
     std::cout << std::endl;
     myCache.printStats();
 
