@@ -1,33 +1,136 @@
-# Configurable Trace-Driven Cache Simulator
-
-A high-performance C++ behavioral model of a CPU cache hierarchy designed for architectural performance analysis. This tool simulates memory access patterns to evaluate the impact of **Capacity**, **Associativity**, and **Block Size** on system hit rates.
-
-## Features
-* **Parameterized Design:** Configurable Cache Size, Block Size, and N-Way Set Associativity.
-* **Trace-Driven Simulation:** Reads external `.trace` files containing memory addresses to drive the simulation.
-* **Hardware-Accurate Decoding:** Implements bit-level address partitioning into **Tag**, **Index**, and **Offset** using bitwise shifts and masks.
-* **Replacement Policy:** Fully functional **Least Recently Used (LRU)** eviction logic using a global access-time counter.
-* **Performance Analytics:** Tracks Total Accesses, Hits, Misses, and calculated Hit Rates.
-
 ## Architectural Analysis Results
-The simulator was used to perform a sensitivity analysis on a custom "Heavy Stress" workload. The results highlight the trade-offs between cache size and associativity.
 
-| Configuration | Hit Rate | Conclusion |
-| :--- | :--- | :--- |
-| 1024B, 1-Way | 25.0% | Baseline; limited by capacity and conflicts. |
-| 1024B, 2-Way | 25.0% | Bottleneck is capacity; associativity did not resolve the misses. |
-| **2048B, 1-Way** | **35.0%** | **Optimal:** Doubling capacity reduced capacity misses by 40% (relative). |
+The simulator was used to compare cache configurations on a small synthetic
+workload (`test.trace`, 20 accesses, 64-byte blocks). The trace has two phases:
 
-### Systems-Thinking Insight
-The analysis showed that for this specific workload, the system was **Capacity-Bound**. Increasing associativity (moving from 1-Way to 2-Way) did not improve performance, suggesting that the "working set" of the program was simply larger than the 1KB cache, regardless of the mapping logic.
+1. **Ping-pong phase:** three addresses (`0x100`, `0x500`, `0x900`) accessed
+   cyclically, three times each.
+2. **Streaming phase:** six consecutive blocks (`0x1000`–`0x1140`), then five of
+   them accessed again.
 
-## Getting Started
+The trace touches **9 distinct blocks**, so at least 9 accesses must miss
+(compulsory misses) and the best possible hit rate is **11/20 = 55%**.
 
-### Prerequisites
-* C++ Compiler (e.g., GCC/G++ 15.2.0 or higher)
-* A terminal/command line interface
+| Configuration      | Hits | Misses | Hit Rate | Compulsory | Conflict | Capacity |
+| :----------------- | ---: | -----: | -------: | ---------: | -------: | -------: |
+| 1 KB, direct-mapped |    5 |     15 |    25.0% |          9 |        6 |        0 |
+| 1 KB, 2-way         |    5 |     15 |    25.0% |          9 |        6 |        0 |
+| 2 KB, direct-mapped |    7 |     13 |    35.0% |          9 |        4 |        0 |
+| **1 KB, 4-way**     | **11** | **9** | **55.0%** |       9 |    **0** |        0 |
 
-### Compilation
-Compile the source files using `g++`:
-```bash
-g++ main.cpp CacheSim.cpp -o cache_sim
+### What the results show
+
+**The workload is conflict-bound, not capacity-bound.** The working set is
+9 blocks, and a 1 KB cache holds 16, so the data always fits; there are no
+capacity misses in any configuration. All the extra misses come from the way
+addresses are mapped to sets.
+
+- **Direct-mapped (1 KB):** `0x100`, `0x500` and `0x900` all decode to set 4.
+  With only one way, each access evicts the block that is needed next, so the
+  whole ping-pong phase misses.
+- **2-way (1 KB):** No improvement. The three blocks still share one set, and
+  cycling three blocks through two ways is the worst case for LRU: the block
+  evicted is always the one requested next.
+- **Direct-mapped (2 KB):** Doubling capacity adds an index bit, which moves
+  `0x500` into its own set. It now hits on reuse, but `0x100` and `0x900`
+  still collide. The gain comes from the different mapping, not from the
+  extra space.
+- **4-way (1 KB):** With enough ways to hold all three conflicting blocks,
+  every conflict miss disappears and the cache reaches the 55% optimum at
+  **half the size** of the 2 KB configuration.
+
+**Takeaway:** For this access pattern, adding associativity is worth more than
+adding capacity, as long as there are enough ways to cover the number of hot
+blocks that share a set. The 2-way result is a reminder that LRU breaks down
+whenever a cyclic working set is even one block larger than the
+associativity.## Architectural Analysis Results
+
+The simulator was used to compare cache configurations on a small synthetic
+workload (`test.trace`, 20 accesses, 64-byte blocks). The trace has two phases:
+
+1. **Ping-pong phase:** three addresses (`0x100`, `0x500`, `0x900`) accessed
+   cyclically, three times each.
+2. **Streaming phase:** six consecutive blocks (`0x1000`–`0x1140`), then five of
+   them accessed again.
+
+The trace touches **9 distinct blocks**, so at least 9 accesses must miss
+(compulsory misses) and the best possible hit rate is **11/20 = 55%**.
+
+| Configuration      | Hits | Misses | Hit Rate | Compulsory | Conflict | Capacity |
+| :----------------- | ---: | -----: | -------: | ---------: | -------: | -------: |
+| 1 KB, direct-mapped |    5 |     15 |    25.0% |          9 |        6 |        0 |
+| 1 KB, 2-way         |    5 |     15 |    25.0% |          9 |        6 |        0 |
+| 2 KB, direct-mapped |    7 |     13 |    35.0% |          9 |        4 |        0 |
+| **1 KB, 4-way**     | **11** | **9** | **55.0%** |       9 |    **0** |        0 |
+
+### What the results show
+
+**The workload is conflict-bound, not capacity-bound.** The working set is
+9 blocks, and a 1 KB cache holds 16, so the data always fits; there are no
+capacity misses in any configuration. All the extra misses come from the way
+addresses are mapped to sets.
+
+- **Direct-mapped (1 KB):** `0x100`, `0x500` and `0x900` all decode to set 4.
+  With only one way, each access evicts the block that is needed next, so the
+  whole ping-pong phase misses.
+- **2-way (1 KB):** No improvement. The three blocks still share one set, and
+  cycling three blocks through two ways is the worst case for LRU: the block
+  evicted is always the one requested next.
+- **Direct-mapped (2 KB):** Doubling capacity adds an index bit, which moves
+  `0x500` into its own set. It now hits on reuse, but `0x100` and `0x900`
+  still collide. The gain comes from the different mapping, not from the
+  extra space.
+- **4-way (1 KB):** With enough ways to hold all three conflicting blocks,
+  every conflict miss disappears and the cache reaches the 55% optimum at
+  **half the size** of the 2 KB configuration.
+
+**Takeaway:** For this access pattern, adding associativity is worth more than
+adding capacity, as long as there are enough ways to cover the number of hot
+blocks that share a set. The 2-way result is a reminder that LRU breaks down
+whenever a cyclic working set is even one block larger than the
+associativity.## Architectural Analysis Results
+
+The simulator was used to compare cache configurations on a small synthetic
+workload (`test.trace`, 20 accesses, 64-byte blocks). The trace has two phases:
+
+1. **Ping-pong phase:** three addresses (`0x100`, `0x500`, `0x900`) accessed
+   cyclically, three times each.
+2. **Streaming phase:** six consecutive blocks (`0x1000`–`0x1140`), then five of
+   them accessed again.
+
+The trace touches **9 distinct blocks**, so at least 9 accesses must miss
+(compulsory misses) and the best possible hit rate is **11/20 = 55%**.
+
+| Configuration      | Hits | Misses | Hit Rate | Compulsory | Conflict | Capacity |
+| :----------------- | ---: | -----: | -------: | ---------: | -------: | -------: |
+| 1 KB, direct-mapped |    5 |     15 |    25.0% |          9 |        6 |        0 |
+| 1 KB, 2-way         |    5 |     15 |    25.0% |          9 |        6 |        0 |
+| 2 KB, direct-mapped |    7 |     13 |    35.0% |          9 |        4 |        0 |
+| **1 KB, 4-way**     | **11** | **9** | **55.0%** |       9 |    **0** |        0 |
+
+### What the results show
+
+**The workload is conflict-bound, not capacity-bound.** The working set is
+9 blocks, and a 1 KB cache holds 16, so the data always fits; there are no
+capacity misses in any configuration. All the extra misses come from the way
+addresses are mapped to sets.
+
+- **Direct-mapped (1 KB):** `0x100`, `0x500` and `0x900` all decode to set 4.
+  With only one way, each access evicts the block that is needed next, so the
+  whole ping-pong phase misses.
+- **2-way (1 KB):** No improvement. The three blocks still share one set, and
+  cycling three blocks through two ways is the worst case for LRU: the block
+  evicted is always the one requested next.
+- **Direct-mapped (2 KB):** Doubling capacity adds an index bit, which moves
+  `0x500` into its own set. It now hits on reuse, but `0x100` and `0x900`
+  still collide. The gain comes from the different mapping, not from the
+  extra space.
+- **4-way (1 KB):** With enough ways to hold all three conflicting blocks,
+  every conflict miss disappears and the cache reaches the 55% optimum at
+  **half the size** of the 2 KB configuration.
+
+**Takeaway:** For this access pattern, adding associativity is worth more than
+adding capacity, as long as there are enough ways to cover the number of hot
+blocks that share a set. The 2-way result is a reminder that LRU breaks down
+whenever a cyclic working set is even one block larger than the
+associativity.

@@ -21,8 +21,6 @@ double runExperiment(uint32_t size, uint32_t block, uint32_t assoc, std::string 
     }
     
     // Calculate final hit rate
-    // We'll add a getter or just use the math here if stats are public
-    // For this example, let's assume we want to see the printout
     sim.printStats();
     return 0.0; 
 }
@@ -46,6 +44,11 @@ int main() {
     // Goal: See if 'Size' is more important than 'Ways'
     std::cout << "\nTEST 3: 2048B, 1-Way" << std::endl;
     runExperiment(2048, 64, 1, traceFile);
+
+    // Experiment 4: Original size, but enough Ways to hold every conflicting block (4-Way)
+    // Goal: See if associativity beats doubling capacity
+    std::cout << "\nTEST 4: 1024B, 4-Way" << std::endl;
+    runExperiment(1024, 64, 4, traceFile);
 
     std::cout << "\n=====================================================" << std::endl;
     std::cout << "Analysis Complete." << std::endl;
